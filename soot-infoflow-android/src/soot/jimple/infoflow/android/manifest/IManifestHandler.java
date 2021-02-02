@@ -7,6 +7,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import soot.jimple.infoflow.android.axml.AXmlAttribute;
+import soot.jimple.infoflow.android.axml.AXmlNode;
+import soot.jimple.infoflow.android.manifest.binary.BinaryManifestActivity;
 import soot.jimple.infoflow.util.SystemClassHandler;
 
 /**
@@ -104,22 +110,76 @@ public interface IManifestHandler<A extends IActivity, S extends IService, C ext
 		for (IAndroidComponent node : getAllComponents())
 			checkAndAddComponent(entryPoints, node);
 
-		if (app != null) {
-			String appName = app.getName();
-			if (appName != null && !appName.isEmpty())
-				entryPoints.add(appName);
-		}
+		/*
+		 * if (app != null) { String appName = app.getName();
+		 * logger.warn("getEntryPointClasses " + appName); if (appName != null &&
+		 * !appName.isEmpty()) entryPoints.add(appName); }
+		 */
 
 		return entryPoints;
 	}
 
+	final Logger logger = LoggerFactory.getLogger("xxxx");
+
 	default void checkAndAddComponent(Set<String> entryPoints, IAndroidComponent component) {
 		final String packageName = getPackageName() + ".";
 		if (component.isEnabled()) {
-			String className = component.getNameString();
-			if (className != null && !className.isEmpty()) {
-				if (className.startsWith(packageName) || !SystemClassHandler.v().isClassInSystemPackage(className))
-					entryPoints.add(className);
+			// BinaryManifestActivity
+			if (component instanceof BinaryManifestActivity) {
+				BinaryManifestActivity activity = (BinaryManifestActivity) component;
+				AXmlNode node = activity.getAXmlNode();
+				AXmlAttribute<?> permisson = node.getAttribute("permission");
+				if (permisson == null) {
+					boolean activity_export = false;
+					List<AXmlNode> children = node.getChildrenWithTag("intent-filter");
+					if (children != null && !children.isEmpty()) {
+						AXmlAttribute<?> exported = node.getAttribute("exported");
+						if (exported == null) {
+							activity_export = true;
+						} else if ((Boolean) exported.getValue()) {
+							activity_export = true;
+						}
+					}
+
+					if (!activity_export) {
+						return;
+					}
+
+					for (AXmlNode intentfilter : children) {
+						List<AXmlNode> actions = intentfilter.getChildrenWithTag("action");
+						List<AXmlNode> categorys = intentfilter.getChildrenWithTag("category");
+						boolean hasViewAction = false, hasBrowsableCateg = false;
+						for (AXmlNode action : actions) {
+							AXmlAttribute<?> attrib = action.getAttribute("name");
+							String val = (String) attrib.getValue();
+							if (val.equals("android.intent.action.VIEW")) {
+								hasViewAction = true;
+								break;
+							}
+						}
+
+						for (AXmlNode categ : categorys) {
+							AXmlAttribute<?> attrib = categ.getAttribute("name");
+							String val = (String) attrib.getValue();
+							if (val.equals("android.intent.category.BROWSABLE")) {
+								hasBrowsableCateg = true;
+								break;
+							}
+						}
+
+						if (hasBrowsableCateg && hasViewAction) {
+							String className = component.getNameString();
+							if (className != null && !className.isEmpty()) {
+								if (className.startsWith(packageName)
+										|| !SystemClassHandler.v().isClassInSystemPackage(className)) {
+									logger.info("add browserable " + className);
+									entryPoints.add(className);
+								}
+							}
+							break;
+						}
+					}
+				}
 			}
 		}
 	}

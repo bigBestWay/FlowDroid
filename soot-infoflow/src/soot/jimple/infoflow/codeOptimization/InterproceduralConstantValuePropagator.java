@@ -822,7 +822,7 @@ public class InterproceduralConstantValuePropagator extends SceneTransformer {
 					isConstant[i] = false;
 			} else {
 				// Check whether we have constant parameter values
-				for (int i = 0; i < iiExpr.getArgCount(); i++) {
+				for (int i = 0; i < iiExpr.getArgCount() && i < isConstant.length; i++) {
 					if (isConstant[i]) {
 						final Value argVal = iiExpr.getArg(i);
 						if (argVal instanceof Constant) {
